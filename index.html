@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Maze - Pause Edition</title>
+    <style>
+        body {
+            margin: 0; background: #1a1a2e;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            height: 100vh; color: #e94560;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden;
+        }
+        canvas {
+            border: 4px solid #0f3460;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            background: #16213e;
+        }
+        .ui { margin-bottom: 15px; text-align: center; }
+        #info { color: #4ecca3; font-weight: bold; font-size: 1.4rem; min-height: 1.6rem; }
+        .controls { color: #999; font-size: 0.9rem; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="ui">
+        <div id="info">APPUYEZ SUR ESPACE POUR COMMENCER</div>
+        <div class="controls">FLÈCHES pour diriger | ESPACE pour lancer le niveau</div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const info = document.getElementById('info');
+
+const grid = 20;
+const cols = 30;
+const rows = 20;
+canvas.width = cols * grid;
+canvas.height = rows * grid;
+
+let snake, dx, dy, nextDx, nextDy, level, walls, obstacles, keyPos, doorPos, hasKey;
+let isWaiting = true; // État pour attendre le joueur
+
+function initLevel(lvl) {
+    level = lvl;
+    snake = [{x: 2, y: 10}, {x: 1, y: 10}];
+    dx = 1; dy = 0; nextDx = 1; nextDy = 0;
+    hasKey = false;
+    isWaiting = true; // On attend avant de bouger
+    walls = [];
+    obstacles = [];
+    
+    // Génération des murs
+    for(let i=0; i<cols; i++) {
+        for(let j=0; j<rows; j++) {
+            if(i === 0 || i === cols-1 || j === 0 || j === rows-1) walls.push({x:i, y:j});
+            else if(i === Math.floor(cols/2) && Math.abs(j - rows/2) > 2) walls.push({x:i, y:j});
+            else if(level > 1 && i === Math.floor(cols/4) && j < 12 && j > 4) walls.push({x:i, y:j});
+            else if(level > 2 && i === Math.floor(3*cols/4) && j < 15 && j > 7) walls.push({x:i, y:j});
+        }
+    }
+
+    // Mines
+    for(let i=0; i < 5 + level*2; i++) {
+        addRandomElement(obstacles);
+    }
+
+    placeKeyAndDoor();
+    info.innerText = `NIVEAU ${level} : PRÊT ? (ESPACE)`;
+}
+
+function addRandomElement(arr) {
+    let x, y;
+    do {
+        x = Math.floor(Math.random() * cols);
+        y = Math.floor(Math.random() * rows);
+    } while (isOccupied(x, y));
+    arr.push({x, y});
+}
+
+function placeKeyAndDoor() {
+    let k = {x:0, y:0}, d = {x:0, y:0};
+    do { k.x = Math.floor(Math.random()*cols); k.y = Math.floor(Math.random()*rows); } while(isOccupied(k.x, k.y));
+    keyPos = k;
+    do { d.x = Math.floor(Math.random()*cols); d.y = Math.floor(Math.random()*rows); } while(isOccupied(d.x, d.y));
+    doorPos = d;
+}
+
+function isOccupied(x, y) {
+    return walls.some(w => w.x === x && w.y === y) || 
+           obstacles.some(o => o.x === x && o.y === y) ||
+           snake.some(s => s.x === x && s.y === y);
+}
+
+window.addEventListener('keydown', e => {
+    // Lancer le mouvement
+    if (e.code === 'Space' && isWaiting) {
+        isWaiting = false;
+        info.innerText = hasKey ? "VITE, LA SORTIE !" : "TROUVEZ LA CLÉ JAUNE";
+    }
+
+    if (e.key === 'ArrowUp' && dy === 0) { nextDx = 0; nextDy = -1; }
+    if (e.key === 'ArrowDown' && dy === 0) { nextDx = 0; nextDy = 1; }
+    if (e.key === 'ArrowLeft' && dx === 0) { nextDx = -1; nextDy = 0; }
+    if (e.key === 'ArrowRight' && dx === 0) { nextDx = 1; nextDy = 0; }
+});
+
+function update() {
+    if (isWaiting) return; // Le serpent ne bouge pas si on attend
+
+    dx = nextDx; dy = nextDy;
+    const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+    if (walls.some(w => w.x === head.x && w.y === head.y)) return reset();
+    if (obstacles.some(o => o.x === head.x && o.y === head.y)) return reset();
+    if (snake.some(s => s.x === head.x && s.y === head.y)) return reset();
+
+    snake.unshift(head);
+
+    if (head.x === keyPos.x && head.y === keyPos.y && !hasKey) {
+        hasKey = true;
+        keyPos = {x: -1, y: -1};
+        info.innerText = `PORTE DÉVERROUILLÉE !`;
+    }
+
+    if (head.x === doorPos.x && head.y === doorPos.y) {
+        if (hasKey) {
+            initLevel(level + 1);
+            return;
+        }
+    }
+
+    snake.pop();
+}
+
+function reset() {
+    alert(`Game Over au Niveau ${level}. Recommençons !`);
+    initLevel(1);
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Murs
+    ctx.fillStyle = "#0f3460";
+    walls.forEach(w => ctx.fillRect(w.x * grid, w.y * grid, grid-1, grid-1));
+
+    // Mines
+    ctx.fillStyle = "#e94560";
+    obstacles.forEach(o => {
+        ctx.beginPath();
+        ctx.arc(o.x * grid + grid/2, o.y * grid + grid/2, grid/3, 0, Math.PI*2);
+        ctx.fill();
+    });
+
+    // Clé
+    if(!hasKey) {
+        ctx.fillStyle = "#fdbb2d";
+        ctx.shadowBlur = 15; ctx.shadowColor = "yellow";
+        ctx.fillRect(keyPos.x * grid + 4, keyPos.y * grid + 4, grid-8, grid-8);
+        ctx.shadowBlur = 0;
+    }
+
+    // Porte
+    ctx.strokeStyle = hasKey ? "#4ecca3" : "#444";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(doorPos.x * grid + 2, doorPos.y * grid + 2, grid-4, grid-4);
+    if(hasKey) {
+        ctx.fillStyle = "rgba(78, 204, 163, 0.3)";
+        ctx.fillRect(doorPos.x * grid + 2, doorPos.y * grid + 2, grid-4, grid-4);
+    }
+
+    // Serpent
+    snake.forEach((s, i) => {
+        ctx.fillStyle = i === 0 ? "#4ecca3" : "#3b9a7a";
+        ctx.shadowBlur = i === 0 ? 10 : 0;
+        ctx.shadowColor = "#4ecca3";
+        ctx.fillRect(s.x * grid + 1, s.y * grid + 1, grid-2, grid-2);
+        ctx.shadowBlur = 0;
+    });
+
+    // Indicateur de pause visuel
+    if (isWaiting) {
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "white";
+        ctx.font = "20px 'Segoe UI'";
+        ctx.textAlign = "center";
+        ctx.fillText("APPUYEZ SUR ESPACE POUR PARTIR", canvas.width/2, canvas.height/2);
+    }
+}
+
+function loop() {
+    update();
+    draw();
+    // Vitesse ralentie : 130ms au lieu de 100ms
+    let currentSpeed = Math.max(70, 130 - (level * 3));
+    setTimeout(loop, currentSpeed);
+}
+
+initLevel(1);
+loop();
+</script>
+</body>
+</html>
